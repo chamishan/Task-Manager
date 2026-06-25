@@ -265,17 +265,240 @@ per IP.
 
 ---
 
+## Phase 3 — Task model + CRUD + RBAC scoping + seed
+
+**Goal:** the core of the app — full task CRUD, with each task owned by users,
+visibility scoped by role, plus filtering/search/sort/pagination and a seed
+script that creates ready-to-use demo accounts.
+
+### What was added
+
+```
+server/src/
+├─ models/
+│  └─ Task.ts                  # task schema + indexes
+├─ validators/
+│  └─ task.validator.ts        # create / update / list-query schemas
+├─ services/
+│  └─ task.service.ts          # CRUD + scoping + filter building
+├─ controllers/
+│  └─ task.controller.ts       # request/response only
+├─ routes/
+│  └─ task.routes.ts           # /api/tasks/* (all behind requireAuth)
+└─ seed.ts                     # demo users + sample tasks
+```
+
+### The data model (`models/Task.ts`)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `title` | String (required, ≤200) | |
+| `description` | String (≤2000) | optional |
+| `priority` | enum `Low/Medium/High` | default `Medium` |
+| `status` | enum `Open/In Progress/Testing/Blocked/Done` | default `Open` (extended statuses = a stated bonus) |
+| `dueDate` | Date | optional |
+| `createdBy` | ObjectId → User | required — who created it |
+| `assignedTo` | ObjectId → User | optional — who it's assigned to |
+| timestamps | createdAt / updatedAt | automatic |
+
+`createdBy` / `assignedTo` are **references** (store the User `_id`); the service
+uses `.populate()` to swap them for `{ name, email }` in responses, so the
+frontend gets human-readable owner/assignee info without extra requests.
+Indexes are declared on every field we filter or sort by (`createdBy`,
+`assignedTo`, `status`, `priority`, `dueDate`) so queries stay fast as data grows.
+
+### RBAC ownership scoping (the heart of the assignment)
+
+The rule "admin sees all, users see only their own" lives in **one place** — the
+service's `scopeFilter()`:
+
+```
+admin →  {}                                            (matches every task)
+user  →  { $or: [{ createdBy: me }, { assignedTo: me }] }
+```
+
+- For **list** queries, this filter is the first condition `AND`-ed with any
+  user-supplied filters, so a user can never widen their view past their own
+  tasks.
+- For **single-task** reads/updates/deletes, `assertCanAccess()` re-checks
+  ownership on the loaded document and throws **403** for anyone who is neither
+  the creator, the assignee, nor an admin.
+
+Putting this in the service (not the controller or route) means the security
+rule is defined once and reused by every operation — easy to audit and test.
+
+### Filtering, search, sort, pagination (`GET /api/tasks`)
+
+All optional query params, validated/coerced by a Zod `listQuerySchema` (with
+safe defaults and a `limit` capped at 100 to prevent abuse):
+
+| Param | Effect |
+| --- | --- |
+| `status`, `priority`, `assignedTo` | exact-match filters |
+| `search` | case-insensitive regex over title + description |
+| `dueBefore`, `dueAfter` | due-date range (enables "overdue" views later) |
+| `sortBy` (`createdAt`/`dueDate`/`title`) + `order` (`asc`/`desc`) | sorting |
+| `page`, `limit` | pagination |
+
+The response includes pagination metadata the frontend needs for page controls:
+
+```json
+{ "tasks": [...], "pagination": { "total": 42, "page": 1, "limit": 20, "pages": 3 } }
+```
+
+### Key decisions & details
+
+**1. PATCH for partial updates.** Update uses `PATCH` with a `.partial()` schema —
+every field optional, but a `.refine()` rejects an empty body. The service loads
+the doc, `Object.assign`s the changes, and calls `save()` so schema validators
+run on the update.
+
+**2. Referential integrity for `assignedTo`.** Before create/update, the service
+verifies the target user actually exists (`assertAssigneeExists`) and returns
+**400** otherwise — no tasks pointing at phantom users.
+
+**3. Invalid IDs handled explicitly.** `assertValidId()` checks the ObjectId
+format up front and returns **400** "Invalid id", instead of letting Mongoose
+throw a confusing `CastError` (which would surface as a 500).
+
+**4. Composing filters without clobbering scope.** A user's scope filter is a
+`$or`; the search filter is *also* a `$or`. Merging them naively would overwrite
+one. They are combined under a single top-level `$and` array so both always
+apply — this is a real correctness/security detail.
+
+**5. Mongoose 9 typing struggle (the filter section we had to rewrite).**
+This was the one part that fought back, so it's worth documenting in full.
+
+*What we were doing.* The list endpoint builds its MongoDB filter
+**dynamically** — start with the role-scope rule, then add a condition for each
+query param that's present. To keep it type-safe we wanted a real type on that
+filter object instead of `any`. In Mongoose 8 and earlier that type has a famous
+name: `FilterQuery<T>`.
+
+*Why it broke — three failed attempts:*
+
+1. `import { FilterQuery } from "mongoose"` → ❌ *"Module 'mongoose' has no
+   exported member 'FilterQuery'."* **Mongoose 9 removed/renamed that type** — the
+   name every tutorial uses is gone.
+2. `mongoose.FilterQuery<ITask>` (via the namespace) → ❌ not there either.
+   Digging into `node_modules`, the type still exists internally but is now
+   called `QueryFilter<T>` **and has no `export`** — Mongoose keeps it private, so
+   it cannot be imported.
+3. Derive it from the function instead:
+   `type TaskFilter = NonNullable<Parameters<typeof Task.find>[0]>` — *"the type of
+   `find()`'s first argument."* It compiled, but the filter object then errored
+   with `'$or' does not exist in type 'Query<...>'`, `'status' does not exist in
+   type 'Query<...>'`, etc.
+
+   The subtle reason: **`find()` is an *overloaded* function.** When you run
+   `Parameters<>` on an overloaded function, TypeScript only reads the **last**
+   overload — and `find()`'s last overload takes a generic `Query<any, any>`
+   object (the query-builder `find` *returns*), **not** a filter. So `TaskFilter`
+   became the wrong type, and TypeScript thought our filter literal was supposed
+   to be a Mongoose *Query object*.
+
+   So two problems collided: (a) Mongoose 9 stopped exporting the filter type's
+   name, and (b) the methods are overloaded, so the "extract the parameter type"
+   trick grabs the wrong signature.
+
+*The fix — don't name the type; let the call site infer it.* Instead of typing a
+separate variable and then passing it to `find()`, build the filter as **one
+inline object literal passed straight into `find()`**:
+
+```ts
+// BEFORE — needs a name for the array's type (which doesn't exist in v9)
+const and: FilterQuery<ITask>[] = [scopeFilter(user)];
+if (q.status) and.push({ status: q.status });
+if (q.priority) and.push({ priority: q.priority });
+// ...
+const filter: FilterQuery<ITask> = { $and: and };
+await Task.find(filter);
+
+// AFTER — no named type; TS validates the literal against find() directly
+const filter = {
+  $and: [
+    scopeFilter(user),
+    ...(q.status ? [{ status: q.status }] : []),
+    ...(q.priority ? [{ priority: q.priority }] : []),
+    ...(q.search ? [{ $or: [
+      { title: { $regex: q.search, $options: "i" } },
+      { description: { $regex: q.search, $options: "i" } },
+    ]}] : []),
+    // due-date range, etc.
+  ],
+};
+await Task.find(filter);
+```
+
+*Why this works.* Passing the literal **directly** into `find(filter)` lets
+TypeScript match it against the **correct** overload (chosen by the shape of the
+argument), and Mongoose's own query-casting types accept exactly these shapes —
+string IDs for ObjectId fields, `$regex` conditions, `$or`/`$and`. Result: it
+type-checks with **no imported type, no `Parameters` trick, no `any`, no casts.**
+
+*The only cost* was converting the imperative "make array → `if` → `push`" style
+into a declarative array with **conditional spreads** (`...(cond ? [piece] :
+[])`). Slightly denser, but fully type-clean.
+
+*Lesson (interview-ready):* when a library's exported types fight you, don't fall
+back to `any` — let the call site infer. Passing a literal straight into the
+function makes TypeScript validate against the real signature instead of you
+trying to rebuild the type by hand.
+
+**6. Seed script (`seed.ts`, run with `npm run seed`).** Standalone script (not a
+route). It clears the collections, creates **1 admin + 2 users**, and inserts
+**10 realistic sample tasks** spread across statuses/priorities with mixed
+past/future due dates. It prints the demo credentials at the end. This lets an
+evaluator log in and see a populated app immediately.
+
+> **Demo accounts** (password `Password123` for all):
+> `admin@demo.com` (admin), `alice@demo.com` (user), `bob@demo.com` (user)
+
+### Endpoints added (all require a valid access token)
+
+| Method | Path | Access | Purpose |
+| --- | --- | --- | --- |
+| POST | `/api/tasks` | any user | Create (creator = current user) |
+| GET | `/api/tasks` | any user | List (role-scoped + filters + pagination) |
+| GET | `/api/tasks/:id` | owner/assignee/admin | Single task |
+| PATCH | `/api/tasks/:id` | owner/assignee/admin | Partial update |
+| DELETE | `/api/tasks/:id` | owner/assignee/admin | Delete |
+
+### Verification (exercised against the running server with seeded data)
+
+| Test | Expected | Result |
+| --- | --- | --- |
+| Admin lists all | 10 tasks | pass (10) |
+| Alice scoped list | only her created/assigned | pass (6) |
+| Bob scoped list | only his | pass (5) |
+| Filter `status=Open` / `priority=High` | correct subsets | pass (4 / 4) |
+| Search `login` | matching task only | pass |
+| Create task | 201 | pass |
+| Owner / admin GET task | 200 | pass |
+| Non-owner GET / DELETE | 403 Forbidden | pass |
+| Owner PATCH status | updated | pass |
+| Owner DELETE | 204, then 404 on re-fetch | pass |
+| Invalid ObjectId | 400 | pass |
+| Non-existent `assignedTo` | 400 | pass |
+| No token | 401 | pass |
+| `tsc --noEmit` / `lint` | clean | pass |
+
+---
+
 ## Current status
 
 - ✅ **Phase 1** — Monorepo + backend foundation
 - ✅ **Phase 2** — Auth + RBAC
-- ⏭️ **Phase 3 (next)** — Task model + CRUD + RBAC scoping + filtering/search + seed script (creates demo admin & user accounts)
+- ✅ **Phase 3** — Task model + CRUD + RBAC scoping + filtering/search + seed
+- ⏭️ **Phase 4 (next)** — Frontend auth: login/register UI, protected routes, axios refresh interceptor
+
+The **entire backend API is now feature-complete** for the core requirements.
+Remaining phases are frontend + bonus features + deployment.
 
 ### Roadmap (remaining)
 
 | Phase | Scope |
 | --- | --- |
-| 3 | Task CRUD, ownership scoping (admin sees all; user sees created/assigned), filter/search/sort/pagination, seed script |
 | 4 | Frontend auth: login/register UI, protected routes, axios refresh interceptor |
 | 5 | Task UI: list (table + cards), detail page, create/edit forms |
 | 6 | Kanban board (drag-drop) + dashboard stats |
