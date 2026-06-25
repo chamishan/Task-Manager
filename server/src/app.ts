@@ -6,6 +6,7 @@ import { env } from "./config/env.js";
 import { notFound, errorHandler } from "./middleware/errorHandler.js";
 import authRoutes from "./routes/auth.routes.js";
 import taskRoutes from "./routes/task.routes.js";
+import userRoutes from "./routes/user.routes.js";
 
 export function createApp() {
     const app = express();
@@ -21,6 +22,7 @@ export function createApp() {
 
     app.use("/api/auth", authRoutes);
     app.use("/api/tasks", taskRoutes);
+    app.use("/api/users", userRoutes);
 
     app.use(notFound);
     app.use(errorHandler);
