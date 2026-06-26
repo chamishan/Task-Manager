@@ -7,6 +7,7 @@ import { notFound, errorHandler } from "./middleware/errorHandler.js";
 import authRoutes from "./routes/auth.routes.js";
 import taskRoutes from "./routes/task.routes.js";
 import userRoutes from "./routes/user.routes.js";
+import aiRoutes from "./routes/ai.routes.js";
 
 export function createApp() {
     const app = express();
@@ -23,6 +24,7 @@ export function createApp() {
     app.use("/api/auth", authRoutes);
     app.use("/api/tasks", taskRoutes);
     app.use("/api/users", userRoutes);
+    app.use("/api/ai", aiRoutes);
 
     app.use(notFound);
     app.use(errorHandler);

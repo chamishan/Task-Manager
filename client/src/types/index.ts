@@ -62,6 +62,7 @@ export interface TaskFilters {
   status?: TaskStatus;
   priority?: TaskPriority;
   assignedTo?: string;
+  createdBy?: string;
   search?: string;
   sortBy?: "createdAt" | "dueDate" | "title";
   order?: "asc" | "desc";

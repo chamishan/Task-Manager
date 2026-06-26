@@ -43,6 +43,9 @@ export function TaskCard({ task, onEdit, onDelete }: Props) {
           <StatusBadge status={task.status} />
           <PriorityBadge priority={task.priority} />
         </div>
+        <p className="text-xs text-muted-foreground">
+          Created by {task.createdBy?.name ?? "—"}
+        </p>
       </CardContent>
       <CardFooter className="justify-between text-sm text-muted-foreground">
         <span className="flex items-center gap-1.5">

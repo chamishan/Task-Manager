@@ -4,7 +4,7 @@ A running, detailed record of **how** the project was built and **why** each
 decision was made. Written for two audiences: the engineer continuing the work,
 and the interviewer who will discuss the thought process behind the app.
 
-This document grows phase by phase. It currently covers **Phases 1–6**.
+This document grows phase by phase. It currently covers **Phases 1–7**.
 
 ---
 
@@ -803,6 +803,130 @@ avoid registering a second draggable with the same id during a drag.
 
 ---
 
+## Phase 7 — AI features (Gemini)
+
+**Goal:** two practical, visible AI features powered by Google Gemini — an inline
+task **suggester** and an admin **standup summary** — added without compromising
+the security model or breaking the app when no key is present.
+
+### Backend
+
+```
+server/src/
+├─ services/      ai.service.ts      # Gemini client + suggest + standup
+├─ controllers/   ai.controller.ts
+├─ validators/    ai.validator.ts
+└─ routes/        ai.routes.ts       # /api/ai/*
+```
+
+New dep: `@google/genai`. New env var: `GEMINI_API_KEY` (optional).
+
+- **Model:** `gemini-2.5-flash` (fast, free tier).
+- **`POST /api/ai/suggest`** (any auth user) — given a task `title`, returns
+  `{ description, priority }`. Uses Gemini's **structured output**
+  (`responseMimeType: application/json` + a `responseSchema`) so the result is
+  always valid JSON with `priority ∈ {Low,Medium,High}` — no brittle text parsing.
+- **`POST /api/ai/standup`** (**admin only**, via `requireRole("admin")`) —
+  compiles all tasks into a compact list and asks Gemini for a grouped daily
+  standup (in progress / blocked / overdue / done) in plain text.
+- **Graceful degradation:** the Gemini client is created **lazily**; if
+  `GEMINI_API_KEY` is missing the endpoints return a clean **503** ("AI not
+  configured") instead of crashing. Other features are unaffected.
+- **No leaking provider errors:** raw Google error payloads are caught and
+  wrapped as a friendly **502** (the real error is logged server-side only).
+- **Rate-limited:** AI routes are capped (15/min per IP) since calls cost quota.
+
+### Frontend
+
+```
+client/src/
+├─ api/        ai.ts                       # suggestTask, getStandup
+├─ hooks/      useAi.ts                     # useSuggestTask, useStandup
+└─ components/
+   ├─ tasks/   TaskFormDialog.tsx (✨ button)
+   └─ dashboard/ StandupButton.tsx
+```
+
+- **✨ "Suggest with AI"** in the create/edit dialog: type a title → click → the
+  description and priority fields are filled via `setValue` (react-hook-form),
+  with a spinner and toasts. Validates that a title exists first.
+- **"Generate standup"** button on the Dashboard, rendered **only for admins**
+  (`user.role === "admin"`), opening a dialog that streams in the summary with
+  loading/error states.
+
+### Notable decisions
+
+- **Structured output over prompt-and-parse.** Asking Gemini for JSON via a
+  schema removes a whole class of "the model returned prose" bugs.
+- **Optional, not required, env var.** AI is additive — the app fully works
+  without a key; only the two AI actions return 503. This keeps local dev and the
+  deployed demo robust.
+- **`.env` is read at startup.** Adding `GEMINI_API_KEY` requires a **server
+  restart** (tsx watches `src/`, not `.env`) — noted here because it's an easy
+  "why isn't my key working" gotcha.
+
+### Verification
+
+| Check | Result |
+| --- | --- |
+| `POST /ai/suggest` (valid key) | returns `{ description, priority }` JSON |
+| `POST /ai/standup` as admin | returns a grouped summary |
+| `POST /ai/standup` as non-admin | 403 |
+| `POST /ai/suggest` without auth | 401 |
+| no/invalid key | clean 502/503 (no raw Google error leaked) |
+| `tsc` (server) + `tsc -b` (client) + lint + build | clean |
+
+> Gemini key + model verified working end-to-end via a standalone probe
+> (`gemini-2.5-flash`, both plain and JSON-schema calls).
+
+---
+
+## Phase 8 — Polish & refinements (in progress)
+
+A batch of UX/correctness improvements after first hands-on testing.
+
+- **Dark mode (default).** A small theme system (`src/theme/`): `ThemeProvider`
+  toggles the `dark` class on `<html>` and persists to `localStorage`; `useTheme`
+  + a `ThemeToggle` (sun/moon) in the sidebar. An inline script in `index.html`
+  applies the stored/default-dark theme **before paint** to avoid a flash. The
+  theme tokens were already defined in `index.css` from Phase 4.
+- **Sidebar layout.** User avatar/name/role, the theme toggle, and **Log out**
+  now live pinned to the **bottom of the sidebar** (desktop). The top bar is now
+  mobile-only (nav + controls), since the sidebar is hidden on small screens.
+- **AI standup rendering.** The summary is Markdown — it's now rendered with
+  `react-markdown` + `remark-gfm` inside a Tailwind Typography (`prose
+  dark:prose-invert`) container, instead of raw text with literal `**`/`###`.
+- **Standup opened to everyone, scoped.** Previously admin-only; now any user can
+  generate one. The service scopes it by role — **admin → team-wide**, **user →
+  only their own tasks** (same `$or` ownership rule). The Dashboard button shows
+  for all users.
+- **Creator visibility + filter.** Added a **`createdBy`** filter to
+  `GET /api/tasks` (and the filter bar), and the creator is now shown in the task
+  **table** (new "Created by" column) and on each **card** — matching the SRS
+  `createdBy`/`assignedTo` linkage. (Detail page already showed it.)
+- **Assignment policy (decision).** Users *can* assign tasks to anyone, including
+  an admin — intentional for a "team workflow app." The creator still owns/sees
+  the task regardless of assignee.
+- **One-click demo login.** The login page has "Quick demo login" buttons (Admin /
+  User-Alice) that fill the credentials and sign in — zero friction for an
+  evaluator. Demo password shown on-screen.
+
+> Still queued for Phase 8: route-level **code-splitting** (`React.lazy`) — the
+> bundle is ~1.27 MB after adding charts + markdown — and a few **tests**.
+
+---
+
+## Deferred / future enhancements
+
+- **Email verification on signup.** Considered for this phase but **deferred** on
+  purpose: it needs an email provider (Resend/SMTP) and, if blocking, would hurt
+  the live demo (cold starts + evaluators stuck waiting on email/spam). If added
+  later, the plan is **non-blocking** verification (use the app immediately;
+  unverified shows a banner + "resend" action), with seeded demo accounts
+  pre-verified. Password reset would reuse the same email plumbing.
+
+---
+
 ## Current status
 
 - ✅ **Phase 1** — Monorepo + backend foundation
@@ -811,15 +935,16 @@ avoid registering a second draggable with the same id during a drag.
 - ✅ **Phase 4** — Frontend foundation + auth (login/register, guards, refresh)
 - ✅ **Phase 5** — Task UI (list table/cards, filters, detail, create/edit modal)
 - ✅ **Phase 6** — Kanban board (drag-drop) + dashboard stats
-- ⏭️ **Phase 7 (next)** — AI features (Gemini): task suggester + admin standup summary
+- ✅ **Phase 7** — AI features (Gemini): task suggester + standup
+- 🔄 **Phase 8 (in progress)** — Polish: dark mode ✓, sidebar ✓, markdown standup ✓,
+  scoped standup-for-all ✓, creator filter ✓ · remaining: code-splitting, tests
 
-All assignment requirements **and** several bonuses are now complete. Remaining
-phases add AI features, polish, and deployment.
+All assignment requirements **and** the planned bonuses are complete. What's left
+is finishing polish and deployment.
 
 ### Roadmap (remaining)
 
 | Phase | Scope |
 | --- | --- |
-| 7 | AI features (Gemini): task description/priority suggester, admin standup summary |
-| 8 | Tests + UX polish (dark mode, code-splitting, loading/empty/error refinements) |
+| 8 | Remaining polish: route code-splitting, a few tests |
 | 9 | Deploy (Vercel + Render + Atlas) + finalize README |

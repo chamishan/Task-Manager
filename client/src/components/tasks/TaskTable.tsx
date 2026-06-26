@@ -31,6 +31,7 @@ export function TaskTable({ tasks, onEdit, onDelete, onStatusChange }: Props) {
             <TableHead>Status</TableHead>
             <TableHead>Priority</TableHead>
             <TableHead>Assignee</TableHead>
+            <TableHead>Created by</TableHead>
             <TableHead>Due</TableHead>
             <TableHead className="w-10" />
           </TableRow>
@@ -54,6 +55,9 @@ export function TaskTable({ tasks, onEdit, onDelete, onStatusChange }: Props) {
               </TableCell>
               <TableCell className="text-sm text-muted-foreground">
                 {task.assignedTo?.name ?? "Unassigned"}
+              </TableCell>
+              <TableCell className="text-sm text-muted-foreground">
+                {task.createdBy?.name ?? "—"}
               </TableCell>
               <TableCell
                 className={cn(

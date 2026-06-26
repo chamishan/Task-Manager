@@ -5,13 +5,17 @@ import { StatCard } from "@/components/dashboard/StatCard";
 import { StatusChart } from "@/components/dashboard/StatusChart";
 import { PriorityChart } from "@/components/dashboard/PriorityChart";
 import { UpcomingTasks } from "@/components/dashboard/UpcomingTasks";
+import { StandupButton } from "@/components/dashboard/StandupButton";
 
 export default function Dashboard() {
   const { data: stats, isLoading } = useTaskStats();
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+        <StandupButton />
+      </div>
 
       {/* Stat cards */}
       {isLoading || !stats ? (

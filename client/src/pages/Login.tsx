@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Loader2 } from "lucide-react";
+import { Loader2, ShieldCheck, User } from "lucide-react";
 import { useAuth } from "@/auth/useAuth";
 import { getErrorMessage } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -23,15 +23,23 @@ const schema = z.object({
 });
 type FormValues = z.infer<typeof schema>;
 
+const DEMO_PASSWORD = "Password123";
+const demoAccounts = [
+  { label: "Admin", email: "admin@demo.com", icon: ShieldCheck },
+  { label: "User (Alice)", email: "alice@demo.com", icon: User },
+];
+
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [serverError, setServerError] = useState<string | null>(null);
+  const [demoPending, setDemoPending] = useState<string | null>(null);
 
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({ resolver: zodResolver(schema) });
 
@@ -48,6 +56,24 @@ export default function Login() {
       setServerError(getErrorMessage(err, "Login failed"));
     }
   });
+
+  const handleDemoLogin = async (email: string) => {
+    // Fill the fields (so it's visible) then sign in.
+    setValue("email", email);
+    setValue("password", DEMO_PASSWORD);
+    setServerError(null);
+    setDemoPending(email);
+    try {
+      await login(email, DEMO_PASSWORD);
+      navigate(from, { replace: true });
+    } catch (err) {
+      setServerError(getErrorMessage(err, "Login failed"));
+    } finally {
+      setDemoPending(null);
+    }
+  };
+
+  const busy = isSubmitting || demoPending !== null;
 
   return (
     <div className="flex min-h-svh items-center justify-center bg-muted/40 p-4">
@@ -93,11 +119,48 @@ export default function Login() {
               <p className="text-sm text-destructive">{serverError}</p>
             )}
 
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
+            <Button type="submit" className="w-full" disabled={busy}>
               {isSubmitting && <Loader2 className="size-4 animate-spin" />}
               Log in
             </Button>
           </form>
+
+          {/* Quick demo logins for evaluators */}
+          <div className="mt-6">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-card px-2 text-muted-foreground">
+                  Quick demo login
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              {demoAccounts.map(({ label, email, icon: Icon }) => (
+                <Button
+                  key={email}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => handleDemoLogin(email)}
+                >
+                  {demoPending === email ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Icon className="size-4" />
+                  )}
+                  {label}
+                </Button>
+              ))}
+            </div>
+            <p className="mt-2 text-center text-xs text-muted-foreground">
+              Demo password: <code>{DEMO_PASSWORD}</code>
+            </p>
+          </div>
 
           <p className="mt-4 text-center text-sm text-muted-foreground">
             Don&apos;t have an account?{" "}

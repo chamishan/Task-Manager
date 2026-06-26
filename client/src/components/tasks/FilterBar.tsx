@@ -153,6 +153,25 @@ export function FilterBar({
       </Select>
 
       <Select
+        value={filters.createdBy ?? ALL}
+        onValueChange={(v) =>
+          onChange({ createdBy: v === ALL ? undefined : v, page: 1 })
+        }
+      >
+        <SelectTrigger className="w-[160px]">
+          <SelectValue placeholder="Created by" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ALL}>Any creator</SelectItem>
+          {users?.map((u) => (
+            <SelectItem key={u._id} value={u._id}>
+              {u.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Select
         value={sortValue}
         onValueChange={(v) => {
           const [sortBy, order] = v.split("-") as [

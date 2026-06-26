@@ -3,11 +3,12 @@ import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { format } from "date-fns";
-import { CalendarIcon, Loader2 } from "lucide-react";
+import { CalendarIcon, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { getErrorMessage } from "@/lib/api";
 import { useCreateTask, useUpdateTask } from "@/hooks/useTasks";
+import { useSuggestTask } from "@/hooks/useAi";
 import { useUsers } from "@/hooks/useUsers";
 import {
   TASK_PRIORITIES,
@@ -82,16 +83,36 @@ export function TaskFormDialog({ open, onOpenChange, task }: Props) {
     control,
     handleSubmit,
     reset,
+    getValues,
+    setValue,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: toDefaults(task),
   });
 
+  const suggest = useSuggestTask();
+
   // Re-seed the form whenever the dialog opens or the target task changes.
   useEffect(() => {
     if (open) reset(toDefaults(task));
   }, [open, task, reset]);
+
+  const handleSuggest = async () => {
+    const title = getValues("title").trim();
+    if (!title) {
+      toast.error("Enter a title first");
+      return;
+    }
+    try {
+      const result = await suggest.mutateAsync(title);
+      setValue("description", result.description, { shouldValidate: true });
+      setValue("priority", result.priority, { shouldValidate: true });
+      toast.success("Filled in with AI ✨");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Couldn't generate a suggestion"));
+    }
+  };
 
   const onSubmit = handleSubmit(async (values) => {
     const input: TaskInput = {
@@ -134,7 +155,24 @@ export function TaskFormDialog({ open, onOpenChange, task }: Props) {
 
         <form onSubmit={onSubmit} className="space-y-4" noValidate>
           <div className="space-y-2">
-            <Label htmlFor="title">Title</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="title">Title</Label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1 text-xs text-muted-foreground"
+                disabled={suggest.isPending}
+                onClick={handleSuggest}
+              >
+                {suggest.isPending ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="size-3.5" />
+                )}
+                Suggest with AI
+              </Button>
+            </div>
             <Input id="title" {...register("title")} />
             {errors.title && (
               <p className="text-sm text-destructive">{errors.title.message}</p>

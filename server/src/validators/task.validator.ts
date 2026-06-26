@@ -32,6 +32,7 @@ export const listQuerySchema = z.object({
   status: z.enum(statuses).optional(),
   priority: z.enum(priorities).optional(),
   assignedTo: objectId.optional(),
+  createdBy: objectId.optional(),
   search: z.string().trim().min(1).optional(),
   dueBefore: z.coerce.date().optional(),
   dueAfter: z.coerce.date().optional(),

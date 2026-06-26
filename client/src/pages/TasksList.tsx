@@ -25,6 +25,7 @@ function parseFilters(sp: URLSearchParams): TaskFilters {
     status: get("status") as TaskStatus | undefined,
     priority: get("priority") as TaskPriority | undefined,
     assignedTo: get("assignedTo"),
+    createdBy: get("createdBy"),
     search: get("search"),
     sortBy: (get("sortBy") as TaskFilters["sortBy"]) ?? "createdAt",
     order: (get("order") as TaskFilters["order"]) ?? "desc",

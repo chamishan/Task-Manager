@@ -14,5 +14,6 @@ export const env = {
     clientUrl: process.env.CLIENT_URL ?? "http://localhost:5173",
     jwtAccessSecret: required("JWT_ACCESS_SECRET"),
     jwtRefreshSecret: required("JWT_REFRESH_SECRET"),
+    geminiApiKey: process.env.GEMINI_API_KEY ?? "",
 };
 

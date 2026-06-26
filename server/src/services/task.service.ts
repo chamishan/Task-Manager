@@ -55,6 +55,7 @@ export async function listTasks(user: Requester, q: ListQuery) {
       ...(q.status ? [{ status: q.status }] : []),
       ...(q.priority ? [{ priority: q.priority }] : []),
       ...(q.assignedTo ? [{ assignedTo: q.assignedTo }] : []),
+      ...(q.createdBy ? [{ createdBy: q.createdBy }] : []),
       ...(q.search
         ? [
             {
