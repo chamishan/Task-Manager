@@ -76,8 +76,17 @@ export default function Login() {
   const busy = isSubmitting || demoPending !== null;
 
   return (
-    <div className="flex min-h-svh items-center justify-center bg-muted/40 p-4">
-      <Card className="w-full max-w-sm">
+    <div className="relative flex min-h-svh items-center justify-center p-4">
+      {/* Full-bleed background image */}
+      <img
+        src="/bg-cover-long.jpg"
+        alt=""
+        className="absolute inset-0 size-full object-cover"
+      />
+      {/* Darkening gradient overlay so the form stays readable */}
+      <div className="absolute inset-0 bg-linear-to-tr from-background via-background/5 to-background/55" />
+
+      <Card className="relative w-full max-w-sm border-white/10 bg-card/70 shadow-2xl backdrop-blur-xl">
         <CardHeader>
           <CardTitle className="text-2xl">Welcome back</CardTitle>
           <CardDescription>Log in to your account to continue.</CardDescription>

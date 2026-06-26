@@ -52,8 +52,8 @@ export default function Register() {
   });
 
   return (
-    <div className="flex min-h-svh items-center justify-center bg-muted/40 p-4">
-      <Card className="w-full max-w-sm">
+    <div className="auth-bg flex min-h-svh items-center justify-center p-4">
+      <Card className="w-full max-w-sm border-white/10 bg-card/60 shadow-2xl backdrop-blur-xl">
         <CardHeader>
           <CardTitle className="text-2xl">Create an account</CardTitle>
           <CardDescription>

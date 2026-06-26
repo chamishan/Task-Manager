@@ -910,6 +910,14 @@ A batch of UX/correctness improvements after first hands-on testing.
 - **One-click demo login.** The login page has "Quick demo login" buttons (Admin /
   User-Alice) that fill the credentials and sign in — zero friction for an
   evaluator. Demo password shown on-screen.
+- **Brand theme (violet→blue).** Retheme the shadcn tokens to an indigo/violet
+  primary on a slightly blue-tinted dark base (`index.css`). Glassmorphism is
+  applied **selectively** — only the auth pages (glass card over a glowing
+  `auth-bg` gradient) — while tables/kanban stay solid for readability. A
+  `bg-brand-gradient` mark is used for the sidebar logo.
+- **Fixed-height app shell + collapsible sidebar.** The shell is `h-svh` with
+  only `<main>` scrolling, so the sidebar (and its pinned user/logout footer)
+  stays put. The sidebar collapses to an icon rail (persisted to `localStorage`).
 
 > Still queued for Phase 8: route-level **code-splitting** (`React.lazy`) — the
 > bundle is ~1.27 MB after adding charts + markdown — and a few **tests**.
