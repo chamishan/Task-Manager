@@ -1,5 +1,4 @@
 import { useDraggable } from "@dnd-kit/core";
-import { CSS } from "@dnd-kit/utilities";
 import { Link } from "react-router-dom";
 import { CalendarDays } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -15,12 +14,10 @@ interface Props {
 }
 
 export function KanbanCard({ task, onEdit, onDelete }: Props) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } =
-    useDraggable({ id: task._id, data: { task } });
-
-  const style = transform
-    ? { transform: CSS.Translate.toString(transform) }
-    : undefined;
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: task._id,
+    data: { task },
+  });
 
   const overdue = isOverdue(task.dueDate, task.status);
 
@@ -28,10 +25,10 @@ export function KanbanCard({ task, onEdit, onDelete }: Props) {
     // The whole card is draggable. The PointerSensor's activation distance
     // (set in Board) lets a stationary click still reach the title link, while
     // any drag moves the card. The actions menu stops propagation so opening it
-    // never starts a drag.
+    // never starts a drag. The original card stays put (no transform) — the
+    // DragOverlay is what follows the cursor.
     <div
       ref={setNodeRef}
-      style={style}
       {...listeners}
       {...attributes}
       className={cn(

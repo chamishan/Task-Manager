@@ -8,6 +8,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
+import { restrictToWindowEdges } from "@dnd-kit/modifiers";
 import { Plus, Search } from "lucide-react";
 import {
   TASK_PRIORITIES,
@@ -161,6 +162,7 @@ export default function Board() {
           sensors={sensors}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
+          autoScroll={false}
         >
           <div className="flex gap-4 overflow-x-auto pb-4">
             {TASK_STATUSES.map((status) => {
@@ -184,7 +186,7 @@ export default function Board() {
             })}
           </div>
 
-          <DragOverlay>
+          <DragOverlay modifiers={[restrictToWindowEdges]} dropAnimation={null}>
             {activeTask ? (
               <div className="w-72 rotate-3 rounded-md border bg-background p-3 shadow-lg">
                 <p className="text-sm font-medium leading-snug">
