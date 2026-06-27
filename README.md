@@ -1,89 +1,155 @@
-# Task Management System
+# Task Manager — Newnop Take-Home Assignment
 
-A team workflow app to create, assign, track, and manage tasks with role-based
-access and workflow states.
+A full-stack Task Management System built with React + Express + MongoDB.
 
-> Status: **in development**.
+**Live demo:** https://task-manager-chamath.vercel.app
+**Repository:** https://github.com/chamathishanka/Task-Manager
 
-## Demo Accounts
+---
 
-After seeding (see [Seeding demo data](#seeding-demo-data)), log in with any of
-these. **Password for all accounts: `Password123`**
+## Demo credentials
 
-| Role  | Email            | Password      |
-| ----- | ---------------- | ------------- |
-| Admin | `admin@demo.com` | `Password123` |
-| User  | `alice@demo.com` | `Password123` |
-| User  | `bob@demo.com`   | `Password123` |
+| Role | Email | Password |
+|------|-------|----------|
+| Admin | admin@demo.com | Password123 |
+| User | alice@demo.com | Password123 |
 
-> Admins see **all** tasks and can generate the AI standup summary. Regular users
-> see only tasks they created or are assigned to.
+> Both accounts are available as one-click buttons on the login page — no typing needed.
 
-## Tech Stack
+---
 
-| Layer    | Tech                                                              |
-| -------- | ---------------------------------------------------------------- |
-| Frontend | React + Vite + TypeScript, Tailwind + shadcn/ui, TanStack Query  |
-| Backend  | Node.js + Express + TypeScript, Mongoose                         |
-| Database | MongoDB                                                          |
-| Auth     | JWT (in-memory access token + httpOnly refresh cookie), bcrypt   |
-| AI       | Google Gemini (task suggester + admin standup summary)          |
+## What was required vs what was built
 
-## Project Structure
+### Required (all completed)
 
-```
-task-manager/
-├─ client/        # React + Vite frontend
-└─ server/        # Express + TypeScript API
-```
+- [x] Create tasks with title, description, priority (Low / Medium / High), due date, status
+- [x] List view (table + card toggle) and task detail page
+- [x] Edit, update, delete tasks
+- [x] Register / Login users
+- [x] `createdBy` / `assignedTo` linked to users
+- [x] Role-based access — users see only their own tasks, admins see all
+- [x] Admin and User roles
+- [x] Deployed to Vercel (frontend) + Railway (backend) + MongoDB Atlas
 
-## Getting Started
+### Bonus (all completed)
+
+- [x] JWT authentication with httpOnly refresh-token cookies and a single-flight refresh interceptor (concurrent 401s fire only one refresh)
+- [x] Extended status workflow: **Open → In Progress → Testing → Blocked → Done**
+- [x] Search and filtering by title, status, priority, assignee, and creator
+- [x] Extra attention to UI/UX (see improvements below)
+
+### Improvements beyond the spec
+
+These were added to demonstrate real-world product thinking:
+
+| Feature | What it does |
+|---------|-------------|
+| **Kanban board** | Drag-and-drop task management across status columns (dnd-kit) |
+| **AI task suggestions** | Type a task title → Gemini generates description, priority, and due date |
+| **AI daily standup** | One-click generates a structured standup summary from your live tasks |
+| **Dashboard with charts** | Stats cards (total, in-progress, overdue, completed) + donut chart (by status) + bar chart (by priority) |
+| **Dark mode** | System-aware default-dark theme toggle, no flash on load |
+| **Collapsible sidebar** | Icon-rail collapse mode persisted to localStorage |
+| **One-click demo login** | Evaluators can log in as Admin or Alice in one click on the login page |
+| **Creator visibility** | Members can see who created each task; filter tasks by creator |
+| **RBAC-scoped standup** | Admins see all tasks in their AI summary; members see only their own |
+| **Rate limiting** | AI endpoints limited to 15 req/min per IP |
+
+---
+
+## Tech stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React 19, Vite, TypeScript, Tailwind v4, shadcn/ui |
+| Backend | Express 5, TypeScript, NodeNext modules |
+| Database | MongoDB + Mongoose 9 |
+| Auth | JWT (access token in memory + 7-day refresh in httpOnly cookie) |
+| AI | Google Gemini (`gemini-2.0-flash`) |
+| Drag & drop | dnd-kit |
+| Charts | Recharts |
+| Deploy | Vercel (frontend) + Railway (backend) + MongoDB Atlas |
+
+---
+
+## Local setup
 
 ### Prerequisites
 
-- Node.js 18+
-- MongoDB running locally (`mongodb://localhost:27017`) or a MongoDB Atlas URI
+- Node 18+
+- MongoDB running locally (`mongodb://localhost:27017`)
 
 ### Backend
 
 ```bash
 cd server
+cp .env.example .env   # fill in your values
 npm install
-cp .env.example .env   # then fill in values
 npm run dev
 ```
 
-The API runs at `http://localhost:5000`. Health check: `GET /api/health`.
+### Frontend
 
-### Seeding demo data
+```bash
+cd client
+cp .env.example .env   # set VITE_API_URL=http://localhost:5000/api
+npm install
+npm run dev
+```
 
-Populate the database with the demo accounts above plus sample tasks:
+### Seed demo data
 
 ```bash
 cd server
 npm run seed
 ```
 
-### Environment Variables (`server/.env`)
+This creates `admin@demo.com` (Admin) and `alice@demo.com` / `bob@demo.com` (Users) with sample tasks.
 
-| Variable             | Description                              |
-| -------------------- | ---------------------------------------- |
-| `PORT`               | API port (default 5000)                  |
-| `NODE_ENV`           | `development` / `production`             |
-| `MONGODB_URI`        | MongoDB connection string                |
-| `CLIENT_URL`         | Frontend origin (for CORS)               |
-| `JWT_ACCESS_SECRET`  | Secret for short-lived access tokens     |
-| `JWT_REFRESH_SECRET` | Secret for refresh tokens                |
-| `GEMINI_API_KEY`     | Google Gemini API key (AI features)      |
+---
 
-## Roadmap
+## Environment variables
 
-- [x] Phase 1 — Monorepo + backend foundation (config, DB, health route)
-- [ ] Phase 2 — User model + auth (register/login/refresh/logout) + RBAC
-- [ ] Phase 3 — Task CRUD + filtering/search + seed script
-- [ ] Phase 4 — Frontend auth + protected routes
-- [ ] Phase 5 — Task UI (list/board/detail/forms)
-- [ ] Phase 6 — Kanban + dashboard
-- [ ] Phase 7 — AI features
-- [ ] Phase 8 — Tests + polish
-- [ ] Phase 9 — Deploy (Vercel + Render + Atlas)
+### Server (`server/.env.example`)
+
+| Variable | Description |
+|----------|-------------|
+| `PORT` | Server port (default 5000) |
+| `NODE_ENV` | `development` or `production` |
+| `MONGODB_URI` | MongoDB connection string |
+| `CLIENT_URL` | Frontend origin for CORS (no trailing slash) |
+| `JWT_ACCESS_SECRET` | Secret for 15-min access tokens |
+| `JWT_REFRESH_SECRET` | Secret for 7-day refresh tokens |
+| `GEMINI_API_KEY` | Google AI Studio API key |
+
+### Client (`client/.env.example`)
+
+| Variable | Description |
+|----------|-------------|
+| `VITE_API_URL` | Backend API base URL (e.g. `http://localhost:5000/api`) |
+
+---
+
+## Project structure
+
+```
+/
+├── client/                  # React + Vite frontend
+│   ├── src/
+│   │   ├── auth/            # JWT auth context + axios interceptors
+│   │   ├── components/
+│   │   │   ├── board/       # Kanban drag-and-drop
+│   │   │   ├── dashboard/   # Charts, stats, standup button
+│   │   │   ├── layout/      # AppLayout, collapsible sidebar
+│   │   │   └── tasks/       # Table, card, filters, form dialog
+│   │   ├── pages/           # Dashboard, Tasks, Board, Login, Register, TaskDetail
+│   │   └── hooks/           # React Query hooks for tasks, users, AI
+│   └── vercel.json          # SPA catch-all rewrite rule
+└── server/                  # Express 5 + TypeScript backend
+    └── src/
+        ├── config/          # Env validation, DB connection
+        ├── middleware/       # Auth, RBAC, error handler, rate limiter
+        ├── models/          # User, Task (Mongoose schemas)
+        ├── routes/          # auth, tasks, users, ai
+        └── services/        # Task service (RBAC scoping), AI service (Gemini)
+```
