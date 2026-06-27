@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Loader2, ShieldCheck, User } from "lucide-react";
+import { Eye, EyeOff, Loader2, ShieldCheck, User } from "lucide-react";
 import { useAuth } from "@/auth/useAuth";
 import { getErrorMessage } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,7 @@ export default function Login() {
   const location = useLocation();
   const [serverError, setServerError] = useState<string | null>(null);
   const [demoPending, setDemoPending] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const {
     register,
@@ -111,12 +112,23 @@ export default function Login() {
 
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                {...register("password")}
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  className="pr-10"
+                  {...register("password")}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
               {errors.password && (
                 <p className="text-sm text-destructive">
                   {errors.password.message}
@@ -170,9 +182,6 @@ export default function Login() {
                 </Button>
               ))}
             </div>
-            <p className="mt-2 text-center text-xs text-muted-foreground">
-              Demo password: <code>{DEMO_PASSWORD}</code>
-            </p>
           </div>
 
           <p className="mt-4 text-center text-sm text-muted-foreground">
