@@ -55,6 +55,7 @@ export async function listTasks(user: Requester, q: ListQuery) {
       ...(q.status ? [{ status: q.status }] : []),
       ...(q.priority ? [{ priority: q.priority }] : []),
       ...(q.assignedTo ? [{ assignedTo: q.assignedTo }] : []),
+      ...(q.createdBy ? [{ createdBy: q.createdBy }] : []),
       ...(q.search
         ? [
             {
@@ -132,4 +133,93 @@ export async function deleteTask(user: Requester, id: string): Promise<void> {
   if (!task) throw new AppError("Task not found", 404);
   assertCanAccess(user, task);
   await task.deleteOne();
+}
+
+const STATUSES = ["Open", "In Progress", "Testing", "Blocked", "Done"] as const;
+const PRIORITIES = ["Low", "Medium", "High"] as const;
+
+/** Build the aggregation $match for the requester's scope. */
+function scopeMatch(user: Requester) {
+  if (user.role === "admin") return {};
+  const id = new mongoose.Types.ObjectId(user.id);
+  return { $or: [{ createdBy: id }, { assignedTo: id }] };
+}
+
+export async function getTaskStats(user: Requester) {
+  const match = scopeMatch(user);
+  const now = new Date();
+
+  const [byStatusAgg, byPriorityAgg, totalsAgg] = await Promise.all([
+    Task.aggregate([
+      { $match: match },
+      { $group: { _id: "$status", count: { $sum: 1 } } },
+    ]),
+    Task.aggregate([
+      { $match: match },
+      { $group: { _id: "$priority", count: { $sum: 1 } } },
+    ]),
+    Task.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: 1 },
+          done: {
+            $sum: { $cond: [{ $eq: ["$status", "Done"] }, 1, 0] },
+          },
+          inProgress: {
+            $sum: { $cond: [{ $eq: ["$status", "In Progress"] }, 1, 0] },
+          },
+          overdue: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $ne: ["$status", "Done"] },
+                    { $ne: ["$dueDate", null] },
+                    { $lt: ["$dueDate", now] },
+                  ],
+                },
+                1,
+                0,
+              ],
+            },
+          },
+        },
+      },
+    ]),
+  ]);
+
+  const byStatus = Object.fromEntries(STATUSES.map((s) => [s, 0])) as Record<
+    (typeof STATUSES)[number],
+    number
+  >;
+  byStatusAgg.forEach((row) => {
+    if (row._id in byStatus) byStatus[row._id as keyof typeof byStatus] = row.count;
+  });
+
+  const byPriority = Object.fromEntries(PRIORITIES.map((p) => [p, 0])) as Record<
+    (typeof PRIORITIES)[number],
+    number
+  >;
+  byPriorityAgg.forEach((row) => {
+    if (row._id in byPriority)
+      byPriority[row._id as keyof typeof byPriority] = row.count;
+  });
+
+  const totals = totalsAgg[0] ?? {
+    total: 0,
+    done: 0,
+    inProgress: 0,
+    overdue: 0,
+  };
+
+  return {
+    total: totals.total,
+    done: totals.done,
+    inProgress: totals.inProgress,
+    overdue: totals.overdue,
+    byStatus,
+    byPriority,
+  };
 }

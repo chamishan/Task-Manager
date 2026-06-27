@@ -52,8 +52,15 @@ export default function Register() {
   });
 
   return (
-    <div className="flex min-h-svh items-center justify-center bg-muted/40 p-4">
-      <Card className="w-full max-w-sm">
+    <div className="relative flex min-h-svh items-center justify-center p-4">
+      <img
+        src="/bg-cover-long.jpg"
+        alt=""
+        className="absolute inset-0 size-full object-cover"
+      />
+      <div className="absolute inset-0 bg-linear-to-tr from-background via-background/85 to-background/55" />
+
+      <Card className="relative w-full max-w-sm border-white/10 bg-card/70 shadow-2xl backdrop-blur-xl">
         <CardHeader>
           <CardTitle className="text-2xl">Create an account</CardTitle>
           <CardDescription>
@@ -122,7 +129,11 @@ export default function Register() {
               <p className="text-sm text-destructive">{serverError}</p>
             )}
 
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
+            <Button
+              type="submit"
+              className="bg-brand-gradient w-full border-0 text-white hover:opacity-90"
+              disabled={isSubmitting}
+            >
               {isSubmitting && <Loader2 className="size-4 animate-spin" />}
               Create account
             </Button>

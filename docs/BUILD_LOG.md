@@ -4,7 +4,7 @@ A running, detailed record of **how** the project was built and **why** each
 decision was made. Written for two audiences: the engineer continuing the work,
 and the interviewer who will discuss the thought process behind the app.
 
-This document grows phase by phase. It currently covers **Phases 1–5**.
+This document grows phase by phase. It currently covers **Phases 1–7**.
 
 ---
 
@@ -706,6 +706,240 @@ used by both table and card to render the due date in red.
 
 ---
 
+## Phase 6 — Kanban board + Dashboard stats
+
+**Goal:** the two most visual bonus features — a drag-and-drop Kanban board where
+moving a card changes its status, and a dashboard with real metrics and charts.
+
+### Backend addition — stats aggregation
+
+`GET /api/tasks/stats` runs a **MongoDB aggregation** (`$match` for role scope →
+`$group`) and returns counts by status, by priority, plus `total / done /
+inProgress / overdue` — computed **in the database**, not by shipping every task
+to the client.
+
+- **Role-scoped in the pipeline.** The `$match` reuses the same scope rule, but in
+  an aggregation Mongoose does **not** auto-cast strings to ObjectIds, so the
+  user id is wrapped with `new mongoose.Types.ObjectId(id)` for the match to work.
+- **Overdue is computed server-side** via `$cond` (`status != Done && dueDate !=
+  null && dueDate < now`).
+- Results are normalized to a full record (every status/priority present, zero-
+  filled) so the frontend never has to guess missing buckets.
+- **Route ordering matters:** `GET /tasks/stats` is registered **before**
+  `GET /tasks/:id`, otherwise `"stats"` would be captured as an `:id`.
+
+### Frontend added
+
+```
+client/src/
+├─ hooks/         useTaskStats.ts
+├─ components/
+│  ├─ dashboard/  StatCard, StatusChart, PriorityChart, UpcomingTasks
+│  └─ board/      KanbanColumn, KanbanCard
+└─ pages/         Dashboard.tsx (rebuilt), Board.tsx
+```
+
+New deps: `@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities`, `recharts`
++ shadcn `chart`.
+
+### Dashboard
+
+- **4 stat cards** (Total / In progress / Overdue / Completed).
+- **Two charts** via shadcn's `chart` wrapper over **recharts**: a status donut
+  (`Pie`) and a priority bar chart, themed with the `--chart-*` CSS variables.
+- **Upcoming & overdue list:** reuses `useTasks` sorted by due date, filtered
+  client-side to dated, not-Done tasks (overdue first).
+- Everything is **role-scoped automatically** because it rides the same API.
+
+### Kanban board
+
+- Five columns = the five statuses; cards grouped client-side from a single
+  `useTasks({ limit: 100 })` fetch (boards don't paginate). Search / priority /
+  assignee filters apply (local state + a debounced search).
+- **dnd-kit:** each column is a `useDroppable`; each card a `useDraggable`.
+  Dropping a card in a different column fires `useUpdateTask({ status })` — the
+  **same optimistic mutation from Phase 5**, so the card moves instantly and the
+  dashboard/list stay in sync.
+
+### Notable decisions & gotchas
+
+**1. Whole-card drag with an activation distance.** The entire card is the
+draggable (not a tiny grip handle — that hurt discoverability; users drag the
+card body). A `PointerSensor` `activationConstraint: { distance: 8 }` means a
+**stationary click** still reaches the title link, while moving past 8px starts a
+drag. The actions menu wrapper calls `stopPropagation` on `pointerDown` so
+opening it never begins a drag.
+
+**2. No persisted ordering.** Cross-column moves (status) are the meaningful
+action and they persist; within-column order is **not** stored — the data model
+has no `order` field and the assignment only needs the status workflow. A clear,
+intentional scope decision rather than building an ordering system.
+
+**3. Cache invalidation widened to `["tasks"]`.** Mutations now invalidate the
+root tasks key (not just `["tasks","list"]`) so the **stats** query
+(`["tasks","stats"]`) also refreshes after any create/update/delete — the
+dashboard never drifts from the list/board.
+
+**4. `DragOverlay` uses a lightweight preview**, not the real `KanbanCard`, to
+avoid registering a second draggable with the same id during a drag.
+
+### Verification
+
+| Check | Result |
+| --- | --- |
+| `GET /api/tasks/stats` as admin | total 14, correct status/priority buckets |
+| `GET /api/tasks/stats` as user (scoped) | total 10 (subset), buckets sum correctly |
+| stats without token | 401 |
+| `tsc -b` typecheck (client) | clean |
+| `oxlint` | clean (only shadcn `button`/`badge` variant-export warnings) |
+| `vite build` (production) | success |
+
+> **Bundle note:** recharts pushes the bundle to ~1.1 MB (337 kB gzipped).
+> Route-level code-splitting (`React.lazy`) is the planned Phase 8 fix.
+
+> **Browser flow to confirm:** dashboard shows live counts + charts; drag a card
+> to another column → status updates and survives reload; the list view reflects
+> the change; admin vs user see different totals.
+
+---
+
+## Phase 7 — AI features (Gemini)
+
+**Goal:** two practical, visible AI features powered by Google Gemini — an inline
+task **suggester** and an admin **standup summary** — added without compromising
+the security model or breaking the app when no key is present.
+
+### Backend
+
+```
+server/src/
+├─ services/      ai.service.ts      # Gemini client + suggest + standup
+├─ controllers/   ai.controller.ts
+├─ validators/    ai.validator.ts
+└─ routes/        ai.routes.ts       # /api/ai/*
+```
+
+New dep: `@google/genai`. New env var: `GEMINI_API_KEY` (optional).
+
+- **Model:** `gemini-2.5-flash` (fast, free tier).
+- **`POST /api/ai/suggest`** (any auth user) — given a task `title`, returns
+  `{ description, priority }`. Uses Gemini's **structured output**
+  (`responseMimeType: application/json` + a `responseSchema`) so the result is
+  always valid JSON with `priority ∈ {Low,Medium,High}` — no brittle text parsing.
+- **`POST /api/ai/standup`** (**admin only**, via `requireRole("admin")`) —
+  compiles all tasks into a compact list and asks Gemini for a grouped daily
+  standup (in progress / blocked / overdue / done) in plain text.
+- **Graceful degradation:** the Gemini client is created **lazily**; if
+  `GEMINI_API_KEY` is missing the endpoints return a clean **503** ("AI not
+  configured") instead of crashing. Other features are unaffected.
+- **No leaking provider errors:** raw Google error payloads are caught and
+  wrapped as a friendly **502** (the real error is logged server-side only).
+- **Rate-limited:** AI routes are capped (15/min per IP) since calls cost quota.
+
+### Frontend
+
+```
+client/src/
+├─ api/        ai.ts                       # suggestTask, getStandup
+├─ hooks/      useAi.ts                     # useSuggestTask, useStandup
+└─ components/
+   ├─ tasks/   TaskFormDialog.tsx (✨ button)
+   └─ dashboard/ StandupButton.tsx
+```
+
+- **✨ "Suggest with AI"** in the create/edit dialog: type a title → click → the
+  description and priority fields are filled via `setValue` (react-hook-form),
+  with a spinner and toasts. Validates that a title exists first.
+- **"Generate standup"** button on the Dashboard, rendered **only for admins**
+  (`user.role === "admin"`), opening a dialog that streams in the summary with
+  loading/error states.
+
+### Notable decisions
+
+- **Structured output over prompt-and-parse.** Asking Gemini for JSON via a
+  schema removes a whole class of "the model returned prose" bugs.
+- **Optional, not required, env var.** AI is additive — the app fully works
+  without a key; only the two AI actions return 503. This keeps local dev and the
+  deployed demo robust.
+- **`.env` is read at startup.** Adding `GEMINI_API_KEY` requires a **server
+  restart** (tsx watches `src/`, not `.env`) — noted here because it's an easy
+  "why isn't my key working" gotcha.
+
+### Verification
+
+| Check | Result |
+| --- | --- |
+| `POST /ai/suggest` (valid key) | returns `{ description, priority }` JSON |
+| `POST /ai/standup` as admin | returns a grouped summary |
+| `POST /ai/standup` as non-admin | 403 |
+| `POST /ai/suggest` without auth | 401 |
+| no/invalid key | clean 502/503 (no raw Google error leaked) |
+| `tsc` (server) + `tsc -b` (client) + lint + build | clean |
+
+> Gemini key + model verified working end-to-end via a standalone probe
+> (`gemini-2.5-flash`, both plain and JSON-schema calls).
+
+---
+
+## Phase 8 — Polish & refinements (in progress)
+
+A batch of UX/correctness improvements after first hands-on testing.
+
+- **Dark mode (default).** A small theme system (`src/theme/`): `ThemeProvider`
+  toggles the `dark` class on `<html>` and persists to `localStorage`; `useTheme`
+  + a `ThemeToggle` (sun/moon) in the sidebar. An inline script in `index.html`
+  applies the stored/default-dark theme **before paint** to avoid a flash. The
+  theme tokens were already defined in `index.css` from Phase 4.
+- **Sidebar layout.** User avatar/name/role, the theme toggle, and **Log out**
+  now live pinned to the **bottom of the sidebar** (desktop). The top bar is now
+  mobile-only (nav + controls), since the sidebar is hidden on small screens.
+- **AI standup rendering.** The summary is Markdown — it's now rendered with
+  `react-markdown` + `remark-gfm` inside a Tailwind Typography (`prose
+  dark:prose-invert`) container, instead of raw text with literal `**`/`###`.
+- **Standup opened to everyone, scoped.** Previously admin-only; now any user can
+  generate one. The service scopes it by role — **admin → team-wide**, **user →
+  only their own tasks** (same `$or` ownership rule). The Dashboard button shows
+  for all users.
+- **Creator visibility + filter.** Added a **`createdBy`** filter to
+  `GET /api/tasks` (and the filter bar), and the creator is now shown in the task
+  **table** (new "Created by" column) and on each **card** — matching the SRS
+  `createdBy`/`assignedTo` linkage. (Detail page already showed it.)
+- **Assignment policy (decision).** Users *can* assign tasks to anyone, including
+  an admin — intentional for a "team workflow app." The creator still owns/sees
+  the task regardless of assignee.
+- **One-click demo login.** The login page has "Quick demo login" buttons (Admin /
+  User-Alice) that fill the credentials and sign in — zero friction for an
+  evaluator. Demo password shown on-screen.
+- **Brand theme (violet→blue).** Retheme the shadcn tokens to an indigo/violet
+  primary on a slightly blue-tinted dark base (`index.css`). Glassmorphism is
+  applied **selectively** — only the auth pages (glass card over a glowing
+  `auth-bg` gradient) — while tables/kanban stay solid for readability. A
+  `bg-brand-gradient` mark is used for the sidebar logo.
+- **Fixed-height app shell + collapsible sidebar.** The shell is `h-svh` with
+  only `<main>` scrolling, so the sidebar (and its pinned user/logout footer)
+  stays put. The sidebar collapses to an icon rail (persisted to `localStorage`).
+- **Visual polish pass.** Full-bleed image background on the auth pages (glass
+  card + darkening gradient); the brand gradient reused as the "magic" cue on AI
+  actions (✨ Suggest, Generate standup) and the auth CTAs; harmonized chart
+  colors (violet→teal); slim themed scrollbars; card hover states; status-colored
+  dots on board columns; branded favicon; and an empty-state illustration.
+
+> Still queued for Phase 8: route-level **code-splitting** (`React.lazy`) — the
+> bundle is ~1.27 MB after adding charts + markdown — and a few **tests**.
+
+---
+
+## Deferred / future enhancements
+
+- **Email verification on signup.** Considered for this phase but **deferred** on
+  purpose: it needs an email provider (Resend/SMTP) and, if blocking, would hurt
+  the live demo (cold starts + evaluators stuck waiting on email/spam). If added
+  later, the plan is **non-blocking** verification (use the app immediately;
+  unverified shows a banner + "resend" action), with seeded demo accounts
+  pre-verified. Password reset would reuse the same email plumbing.
+
+---
+
 ## Current status
 
 - ✅ **Phase 1** — Monorepo + backend foundation
@@ -713,16 +947,17 @@ used by both table and card to render the due date in red.
 - ✅ **Phase 3** — Task model + CRUD + RBAC scoping + filtering/search + seed
 - ✅ **Phase 4** — Frontend foundation + auth (login/register, guards, refresh)
 - ✅ **Phase 5** — Task UI (list table/cards, filters, detail, create/edit modal)
-- ⏭️ **Phase 6 (next)** — Kanban board (drag-drop) + dashboard stats
+- ✅ **Phase 6** — Kanban board (drag-drop) + dashboard stats
+- ✅ **Phase 7** — AI features (Gemini): task suggester + standup
+- 🔄 **Phase 8 (in progress)** — Polish: dark mode ✓, sidebar ✓, markdown standup ✓,
+  scoped standup-for-all ✓, creator filter ✓ · remaining: code-splitting, tests
 
-The app is now a fully usable task manager end-to-end. Remaining phases add the
-Kanban/dashboard bonuses, AI features, polish, and deployment.
+All assignment requirements **and** the planned bonuses are complete. What's left
+is finishing polish and deployment.
 
 ### Roadmap (remaining)
 
 | Phase | Scope |
 | --- | --- |
-| 6 | Kanban board (drag-drop) + dashboard stats |
-| 7 | AI features (Gemini): task description/priority suggester, admin standup summary |
-| 8 | Tests + UX polish (dark mode, code-splitting, loading/empty/error refinements) |
+| 8 | Remaining polish: route code-splitting, a few tests |
 | 9 | Deploy (Vercel + Render + Atlas) + finalize README |

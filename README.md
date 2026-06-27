@@ -3,7 +3,21 @@
 A team workflow app to create, assign, track, and manage tasks with role-based
 access and workflow states.
 
-> Status: **in development** — backend foundation scaffolded (Phase 1).
+> Status: **in development**.
+
+## Demo Accounts
+
+After seeding (see [Seeding demo data](#seeding-demo-data)), log in with any of
+these. **Password for all accounts: `Password123`**
+
+| Role  | Email            | Password      |
+| ----- | ---------------- | ------------- |
+| Admin | `admin@demo.com` | `Password123` |
+| User  | `alice@demo.com` | `Password123` |
+| User  | `bob@demo.com`   | `Password123` |
+
+> Admins see **all** tasks and can generate the AI standup summary. Regular users
+> see only tasks they created or are assigned to.
 
 ## Tech Stack
 
@@ -40,6 +54,15 @@ npm run dev
 ```
 
 The API runs at `http://localhost:5000`. Health check: `GET /api/health`.
+
+### Seeding demo data
+
+Populate the database with the demo accounts above plus sample tasks:
+
+```bash
+cd server
+npm run seed
+```
 
 ### Environment Variables (`server/.env`)
 

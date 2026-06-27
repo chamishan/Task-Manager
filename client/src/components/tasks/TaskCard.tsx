@@ -23,7 +23,7 @@ export function TaskCard({ task, onEdit, onDelete }: Props) {
   const overdue = isOverdue(task.dueDate, task.status);
 
   return (
-    <Card className="flex flex-col">
+    <Card className="flex flex-col transition-colors hover:border-primary/50">
       <CardHeader className="flex-row items-start justify-between gap-2 space-y-0">
         <Link
           to={`/tasks/${task._id}`}
@@ -43,6 +43,9 @@ export function TaskCard({ task, onEdit, onDelete }: Props) {
           <StatusBadge status={task.status} />
           <PriorityBadge priority={task.priority} />
         </div>
+        <p className="text-xs text-muted-foreground">
+          Created by {task.createdBy?.name ?? "—"}
+        </p>
       </CardContent>
       <CardFooter className="justify-between text-sm text-muted-foreground">
         <span className="flex items-center gap-1.5">

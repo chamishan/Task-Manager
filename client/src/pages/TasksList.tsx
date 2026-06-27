@@ -25,6 +25,7 @@ function parseFilters(sp: URLSearchParams): TaskFilters {
     status: get("status") as TaskStatus | undefined,
     priority: get("priority") as TaskPriority | undefined,
     assignedTo: get("assignedTo"),
+    createdBy: get("createdBy"),
     search: get("search"),
     sortBy: (get("sortBy") as TaskFilters["sortBy"]) ?? "createdAt",
     order: (get("order") as TaskFilters["order"]) ?? "desc",
@@ -180,6 +181,61 @@ function EmptyState({
 }) {
   return (
     <div className="flex flex-col items-center justify-center rounded-md border border-dashed bg-background py-16 text-center">
+      <svg viewBox="0 0 96 96" className="mb-4 size-24" fill="none" aria-hidden>
+        <rect
+          x="22"
+          y="14"
+          width="52"
+          height="68"
+          rx="8"
+          className="fill-muted stroke-border"
+          strokeWidth="2"
+        />
+        <rect
+          x="38"
+          y="8"
+          width="20"
+          height="12"
+          rx="4"
+          className="fill-background stroke-border"
+          strokeWidth="2"
+        />
+        <line
+          x1="32"
+          y1="36"
+          x2="64"
+          y2="36"
+          className="stroke-muted-foreground/40"
+          strokeWidth="3"
+          strokeLinecap="round"
+        />
+        <line
+          x1="32"
+          y1="48"
+          x2="64"
+          y2="48"
+          className="stroke-muted-foreground/40"
+          strokeWidth="3"
+          strokeLinecap="round"
+        />
+        <line
+          x1="32"
+          y1="60"
+          x2="52"
+          y2="60"
+          className="stroke-muted-foreground/40"
+          strokeWidth="3"
+          strokeLinecap="round"
+        />
+        <circle cx="68" cy="68" r="14" className="fill-primary" />
+        <path
+          d="M62 68l4 4 8-8"
+          className="stroke-primary-foreground"
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
       <p className="font-medium">{title}</p>
       <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
     </div>

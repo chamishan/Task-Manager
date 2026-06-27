@@ -62,6 +62,7 @@ export interface TaskFilters {
   status?: TaskStatus;
   priority?: TaskPriority;
   assignedTo?: string;
+  createdBy?: string;
   search?: string;
   sortBy?: "createdAt" | "dueDate" | "title";
   order?: "asc" | "desc";
@@ -76,4 +77,13 @@ export interface TaskInput {
   status?: TaskStatus;
   dueDate?: string;
   assignedTo?: string;
+}
+
+export interface TaskStats {
+  total: number;
+  done: number;
+  inProgress: number;
+  overdue: number;
+  byStatus: Record<TaskStatus, number>;
+  byPriority: Record<TaskPriority, number>;
 }

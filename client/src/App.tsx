@@ -6,6 +6,7 @@ import Register from "@/pages/Register";
 import Dashboard from "@/pages/Dashboard";
 import TasksList from "@/pages/TasksList";
 import TaskDetail from "@/pages/TaskDetail";
+import Board from "@/pages/Board";
 
 export default function App() {
   return (
@@ -18,6 +19,7 @@ export default function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/tasks" element={<TasksList />} />
           <Route path="/tasks/:id" element={<TaskDetail />} />
+          <Route path="/board" element={<Board />} />
         </Route>
       </Route>
 

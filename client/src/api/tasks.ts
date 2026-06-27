@@ -4,7 +4,13 @@ import type {
   TaskFilters,
   TaskInput,
   TaskListResponse,
+  TaskStats,
 } from "@/types";
+
+export async function getStats(): Promise<TaskStats> {
+  const res = await api.get("/tasks/stats");
+  return res.data;
+}
 
 export async function listTasks(
   filters: TaskFilters

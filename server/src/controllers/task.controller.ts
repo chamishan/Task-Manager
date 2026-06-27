@@ -11,6 +11,11 @@ export async function create(req: Request, res: Response) {
   res.status(201).json({ task });
 }
 
+export async function stats(req: Request, res: Response) {
+  const result = await taskService.getTaskStats(requester(req));
+  res.json(result);
+}
+
 export async function list(req: Request, res: Response) {
   const parsed = listQuerySchema.safeParse(req.query);
   if (!parsed.success) {

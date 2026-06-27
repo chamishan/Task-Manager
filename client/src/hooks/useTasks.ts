@@ -33,7 +33,7 @@ export function useCreateTask() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: TaskInput) => tasksApi.createTask(input),
-    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY, "list"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
   });
 }
 
@@ -82,7 +82,7 @@ export function useUpdateTask() {
       qc.setQueryData([KEY, "detail", task._id], task);
     },
 
-    onSettled: () => qc.invalidateQueries({ queryKey: [KEY, "list"] }),
+    onSettled: () => qc.invalidateQueries({ queryKey: [KEY] }),
   });
 }
 
@@ -90,6 +90,6 @@ export function useDeleteTask() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => tasksApi.deleteTask(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY, "list"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
   });
 }
